@@ -5,6 +5,19 @@ Zero-Centered RMSNorm
 import torch
 import torch.nn as nn
 
+# fp32, total bytes: 4288
+# ((2, 8, 16), torch.float32, 1024),
+# ((2, 8, 16), torch.float32, 1024),
+# ((2, 8, 1), torch.float32, 64),
+# ((2, 8, 1), torch.float32, 64),
+# ((2, 8, 16), torch.float32, 1024),
+# ((16,), torch.float32, 64),
+# ((2, 8, 16), torch.float32, 1024)]
+
+# bf16 - same
+
+# so B * S * H * 4 + B * S * 2 * H
+
 
 class RMSNorm(nn.Module):
     """

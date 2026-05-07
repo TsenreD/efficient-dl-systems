@@ -23,6 +23,7 @@ class TransformerBlock(nn.Module):
         self.ln2 = RMSNorm(config.hidden_dim, eps=config.rms_norm_eps)
         self.ffn = SwiGLUFeedForward(config.hidden_dim, config.intermediate_dim)
 
+    @torch.compile
     def forward(
         self,
         x: torch.Tensor,
@@ -64,6 +65,7 @@ class EfficientTransformer(nn.Module):
         elif isinstance(module, nn.Embedding):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
+    @torch.compile
     def forward(
         self,
         input_ids: torch.Tensor,
@@ -88,7 +90,7 @@ class EfficientTransformer(nn.Module):
 
         # Training path: fused linear + CE
         if labels is not None:
-            return self.loss_fn() # TODO: Fill this
+            return self.loss_fn(x, self.lm_head.weight, labels)
 
         # Inference path
         logits = self.lm_head(x)

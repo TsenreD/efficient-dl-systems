@@ -123,7 +123,8 @@ class MultiHeadAttention(nn.Module):
 
         attn_weights = F.softmax(attn_weights, dim=-1)
         attn_weights = self.dropout(attn_weights)
-
+        
+        # B * n_heads * S * S @ B * n_heads * S * head_Dim = B * n_heads * S * head_dim
         out = torch.matmul(attn_weights, v)
 
         out = out.transpose(1, 2).contiguous().view(B, S, H)

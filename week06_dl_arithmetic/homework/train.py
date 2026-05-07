@@ -23,6 +23,22 @@ from config import TransformerConfig
 from model import BaselineTransformer
 from optimizer.ademamix import AdEMAMix
 
+"""
+Step    10 | Epoch 1/1 | Loss 9.7822 | LR 7.50e-05 | Tokens/s 111,374
+Step    20 | Epoch 1/1 | Loss 9.7730 | LR 9.91e-05 | Tokens/s 140,294
+Step    30 | Epoch 1/1 | Loss 9.7604 | LR 9.45e-05 | Tokens/s 140,303
+Step    40 | Epoch 1/1 | Loss 9.7485 | LR 8.66e-05 | Tokens/s 140,320
+Step    50 | Epoch 1/1 | Loss 9.7391 | LR 7.58e-05 | Tokens/s 140,145
+Step    60 | Epoch 1/1 | Loss 9.7320 | LR 6.31e-05 | Tokens/s 140,269
+Step    70 | Epoch 1/1 | Loss 9.7263 | LR 4.93e-05 | Tokens/s 140,304
+Step    80 | Epoch 1/1 | Loss 9.7219 | LR 3.56e-05 | Tokens/s 140,317
+Step    90 | Epoch 1/1 | Loss 9.7183 | LR 2.30e-05 | Tokens/s 140,322
+Step   100 | Epoch 1/1 | Loss 9.7152 | LR 1.25e-05 | Tokens/s 140,294
+Step   110 | Epoch 1/1 | Loss 9.7127 | LR 4.87e-06 | Tokens/s 140,311
+Step   120 | Epoch 1/1 | Loss 9.7107 | LR 6.94e-07 | Tokens/s 140,343
+Epoch 1 complete | Avg Loss: 9.7098
+"""
+
 
 class SyntheticDataset(Dataset):
     """

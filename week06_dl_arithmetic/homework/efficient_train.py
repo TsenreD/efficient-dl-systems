@@ -13,6 +13,22 @@ Usage:
     torchrun --nproc_per_node=2 efficient_train.py
 """
 
+"""
+Step    10 | Epoch 1/1 | Loss 9.7814 | LR 7.50e-05 | Tokens/s 30,628
+Step    20 | Epoch 1/1 | Loss 9.7676 | LR 9.91e-05 | Tokens/s 445,665
+Step    30 | Epoch 1/1 | Loss 9.7512 | LR 9.45e-05 | Tokens/s 447,779
+Step    40 | Epoch 1/1 | Loss 9.7379 | LR 8.66e-05 | Tokens/s 446,938
+Step    50 | Epoch 1/1 | Loss 9.7285 | LR 7.58e-05 | Tokens/s 444,200
+Step    60 | Epoch 1/1 | Loss 9.7219 | LR 6.31e-05 | Tokens/s 446,858
+Step    70 | Epoch 1/1 | Loss 9.7169 | LR 4.93e-05 | Tokens/s 447,718
+Step    80 | Epoch 1/1 | Loss 9.7131 | LR 3.56e-05 | Tokens/s 446,276
+Step    90 | Epoch 1/1 | Loss 9.7100 | LR 2.30e-05 | Tokens/s 445,532
+Step   100 | Epoch 1/1 | Loss 9.7075 | LR 1.25e-05 | Tokens/s 446,276
+Step   110 | Epoch 1/1 | Loss 9.7054 | LR 4.87e-06 | Tokens/s 446,915
+Step   120 | Epoch 1/1 | Loss 9.7037 | LR 6.94e-07 | Tokens/s 448,610
+Epoch 1 complete | Avg Loss: 9.7029
+"""
+
 import os
 import time
 import argparse
@@ -20,7 +36,7 @@ from contextlib import nullcontext
 
 import torch
 import torch.distributed as dist
-from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.utils.data import Dataset, DataLoader, DistributedSampler
 
 from config import TransformerConfig
@@ -106,7 +122,8 @@ def train(args):
 
     # TODO: Replace DDP with FSDP
     if world_size > 1:
-        model = DDP(model, device_ids=[local_rank])
+        torch.cuda.set_device(local_rank)
+        model = FSDP(model)
 
     num_params = sum(p.numel() for p in model.parameters())
     if is_master:

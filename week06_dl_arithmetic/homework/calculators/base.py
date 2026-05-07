@@ -18,18 +18,13 @@ class GPUSpec:
 # H100 GPU spec for example
 H100_SXM = GPUSpec(
     name="H100 SXM", 
-    memory_bandwidth_gbps=2800,
+    memory_bandwidth_gbps=2400,
     flops_bf16=800,
     interconnect_bandwidth_gbps=400,
 )
 
 # Put your GPU spec here
-GPUS_SPEC = GPUSpec(
-    name="...", 
-    memory_bandwidth_gbps=...,
-    flops_bf16=...,
-    interconnect_bandwidth_gbps=...,
-)
+GPUS_SPEC = H100_SXM
 
 
 @dataclass

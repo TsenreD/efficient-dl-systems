@@ -10,12 +10,8 @@ You are given a **transformer training script** that works correctly but uses no
 
 With Flash Attention (for bonus tasks):
 ```bash
-uv pip install -e ".[flash]"
-```
-
-Without Flash Attention:
-```bash
-uv pip install -e .
+pip install -e .
+MAX_JOBS=8 pip install "flash-attn==2.8.3" --no-build-isolation
 ```
 
 ### Project Structure
@@ -42,7 +38,7 @@ uv pip install -e .
 
 Apply all optimizations below. Points are awarded only if tests pass.
 
-### 1.1 Fused Linear Cross Entropy (0.5 points)
+### DONE 1.1 Fused Linear Cross Entropy (0.5 points)
 
 Recall from lecture: fusing the linear projection with cross entropy avoids materializing the full logits tensor (vocab_size can be huge!). Apply this optimization by replacing separate lm_head + F.cross_entropy with `LigerFusedLinearCrossEntropyLoss` from Liger-Kernels.
 
@@ -50,7 +46,7 @@ Recall from lecture: fusing the linear projection with cross entropy avoids mate
 
 **Test:** `pytest tests/test_loss.py`
 
-### 1.2 Efficient Attention (1 point)
+### DONE 1.2 Efficient Attention (1 point)
 
 Replace vanilla attention with optimized implementation:
 - Fused QKV projection (single matmul instead of three) **(0.25 points, mandatory)**
@@ -61,7 +57,7 @@ Replace vanilla attention with optimized implementation:
 
 **Test (optional):** `pytest tests/test_attention.py`
 
-### 1.3 Fused & Memory-Efficient Zero-Centered RMSNorm (1.5 points)
+### DONE 1.3 Fused & Memory-Efficient Zero-Centered RMSNorm (1.5 points)
 
 Unlike standard RMSNorm (`y = x/rms(x) * weight` with weight init to 1), Zero-Centered uses:
 - `y = x/rms(x) * (1 + weight)` with weight initialized to **zeros**
@@ -77,7 +73,7 @@ Unlike standard RMSNorm (`y = x/rms(x) * weight` with weight init to 1), Zero-Ce
 
 **Test:** `pytest tests/test_rmsnorm.py`
 
-### 1.4 Fused & Memory-Efficient gpt-oss SwiGLU (2 points)
+### DONE 1.4 Fused & Memory-Efficient gpt-oss SwiGLU (2 points)
 
 The baseline uses gpt-oss variant which differs from standard SwiGLU:
 - `gate * sigmoid(gate * alpha)` instead of `silu(gate)`
@@ -99,7 +95,7 @@ If you're new to Triton, start with the [Triton Language Guide](https://triton-l
 
 **Test:** `pytest tests/test_swiglu.py`
 
-### 1.5 End to End Test (0.5 points)
+### DONE 1.5 End to End Test (0.5 points)
 
 After completing all 4 model optimizations, run `pytest tests/test_e2e.py` to verify correctness and memory reduction.
 

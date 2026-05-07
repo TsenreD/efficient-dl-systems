@@ -8,13 +8,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from config import TransformerConfig
+from flash_attn import flash_attn_func
+from flash_attn.layers.rotary import apply_rotary_emb
 
 
 class RotaryPositionalEmbedding(nn.Module):
     """
     Rotary Positional Embedding (RoPE).
     """
-    # TODO: Use fused RoPE from flash_attn library instead
 
     def __init__(self, head_dim: int, max_seq_len: int = 2048, theta: float = 10000.0):
         super().__init__()
@@ -29,12 +30,13 @@ class RotaryPositionalEmbedding(nn.Module):
     
     def _build_cache(self, seq_len: int):
         """Build sin/cos cache up to seq_len."""
-        positions = torch.arange(seq_len, device=self.inv_freq.device)
-        freqs = torch.outer(positions, self.inv_freq)
-        emb = torch.cat([freqs, freqs], dim=-1)
+        positions = torch.arange(seq_len, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
+        freqs = torch.outer(positions, self.inv_freq)  # (S, D/2)
+        
+        self.register_buffer("cos", freqs.cos(), persistent=False)  # (S, D/2)
+        self.register_buffer("sin", freqs.sin(), persistent=False)  # (S, D/2)
 
-        self.register_buffer('cos', emb.cos().unsqueeze(0).unsqueeze(0), persistent=False)
-        self.register_buffer('sin', emb.sin().unsqueeze(0).unsqueeze(0), persistent=False)
+        self.max_seq_len = seq_len
     
     def forward(self, q: torch.Tensor, k: torch.Tensor, seq_len: int) -> tuple[torch.Tensor, torch.Tensor]:
         """
@@ -51,21 +53,16 @@ class RotaryPositionalEmbedding(nn.Module):
         assert seq_len <= self.max_seq_len, \
             f"seq_len ({seq_len}) exceeds max_seq_len ({self.max_seq_len})"
         
-        cos = self.cos[:, :, :seq_len, :]
-        sin = self.sin[:, :, :seq_len, :]
+        if seq_len > self.max_seq_len:
+            self._build_cache(seq_len)
 
-        q_rotated = self._apply_rotary(q, cos, sin)
-        k_rotated = self._apply_rotary(k, cos, sin)
+        cos = self.cos[:seq_len].to(device=q.device, dtype=q.dtype)
+        sin = self.sin[:seq_len].to(device=q.device, dtype=q.dtype)
+
+        q_r = apply_rotary_emb(q, cos, sin)
+        k_r = apply_rotary_emb(k, cos, sin)
         
-        return q_rotated, k_rotated
-    
-    def _apply_rotary(self, x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.Tensor:
-        """Apply rotary embedding to tensor x."""
-        orig_dtype = x.dtype
-        x1 = x[..., : x.shape[-1] // 2]
-        x2 = x[..., x.shape[-1] // 2 :]
-        rotated = torch.cat([-x2, x1], dim=-1)
-        return (x.float() * cos.float() + rotated.float() * sin.float()).to(orig_dtype)
+        return q_r, k_r
 
 
 class MultiHeadAttention(nn.Module):
@@ -81,9 +78,7 @@ class MultiHeadAttention(nn.Module):
         self.head_dim = config.hidden_dim // config.num_heads
 
         # TODO: Replace with fused QKV projection
-        self.q_proj = nn.Linear(config.hidden_dim, config.hidden_dim, bias=False)
-        self.k_proj = nn.Linear(config.hidden_dim, config.hidden_dim, bias=False)
-        self.v_proj = nn.Linear(config.hidden_dim, config.hidden_dim, bias=False)
+        self.qkv_proj = nn.Linear(config.hidden_dim, 3 * config.hidden_dim, bias=False)
         self.out_proj = nn.Linear(config.hidden_dim, config.hidden_dim, bias=False)
 
         self.rope = RotaryPositionalEmbedding(
@@ -101,35 +96,40 @@ class MultiHeadAttention(nn.Module):
     ) -> torch.Tensor:
         B, S, H = x.shape
 
-        q = self.q_proj(x)
-        k = self.k_proj(x)
-        v = self.v_proj(x)
+        qkv = self.qkv_proj(x)
+        q = qkv[:, :, :H]
+        k = qkv[:, :, H:2*H]
+        v = qkv[:, :, 2*H:3*H]
 
-        q = q.view(B, S, self.num_heads, self.head_dim).transpose(1, 2)
-        k = k.view(B, S, self.num_heads, self.head_dim).transpose(1, 2)
-        v = v.view(B, S, self.num_heads, self.head_dim).transpose(1, 2)
+        q = q.view(B, S, self.num_heads, self.head_dim)#.transpose(1, 2)
+        k = k.view(B, S, self.num_heads, self.head_dim)#.transpose(1, 2)
+        v = v.view(B, S, self.num_heads, self.head_dim)# .transpose(1, 2)
 
         q, k = self.rope(q, k, S)
+        # q = q.transpose(1, 2)  # back to (B, H, S, D)
+        # k = k.transpose(1, 2)
 
-        # TODO: Replace vanilla attention with Flash Attention
-        scale = 1.0 / math.sqrt(self.head_dim)
-        attn_weights = torch.matmul(q, k.transpose(-2, -1)) * scale
+        out = flash_attn_func(
+            q.to(torch.bfloat16), k.to(torch.bfloat16), v.to(torch.bfloat16), causal=True
+        ).contiguous().view(B, S, H).to(x.dtype)
+        # scale = 1.0 / math.sqrt(self.head_dim)
+        # attn_weights = torch.matmul(q, k.transpose(-2, -1)) * scale
 
-        if attention_mask is None:
-            causal_mask = torch.triu(
-                torch.ones(S, S, dtype=torch.bool, device=x.device), 
-                diagonal=1
-            )
-            attn_weights = attn_weights.masked_fill(causal_mask, float('-inf'))
-        else:
-            attn_weights = attn_weights + attention_mask
+        # if attention_mask is None:
+        #     causal_mask = torch.triu(
+        #         torch.ones(S, S, dtype=torch.bool, device=x.device), 
+        #         diagonal=1
+        #     )
+        #     attn_weights = attn_weights.masked_fill(causal_mask, float('-inf'))
+        # else:
+        #     attn_weights = attn_weights + attention_mask
 
-        attn_weights = F.softmax(attn_weights, dim=-1)
-        attn_weights = self.dropout(attn_weights)
+        # attn_weights = F.softmax(attn_weights, dim=-1)
+        # attn_weights = self.dropout(attn_weights)
 
-        out = torch.matmul(attn_weights, v)
+        # out = torch.matmul(attn_weights, v)
 
-        out = out.transpose(1, 2).contiguous().view(B, S, H)
+        # out = out.transpose(1, 2).contiguous().view(B, S, H)
         out = self.out_proj(out)
 
         return out
